@@ -39,6 +39,26 @@ def add_detail(details: dict, label: str, value: str):
     if isinstance(value, str) and value.strip():
         details[label] = value.strip()
 
+def inferred_burn_evidence(details: dict) -> bool:
+    """
+    True if structured fields imply burn features were observed (depth/TBSA/morph features),
+    even if the user forgot to check the main morphology checkbox.
+    """
+    depth = details.get("Depth (structured)", "")
+    depth_implies = depth in ["Superficial", "Superficial partial", "Deep partial", "Full thickness"]
+
+    tbsa_text = details.get("TBSA % (structured)", "")
+    tbsa_implies = False
+    try:
+        tbsa_implies = float(tbsa_text.replace("%", "").strip()) > 0
+    except:
+        tbsa_implies = False
+
+    morph_struct = details.get("Morphology (structured)", "")
+    morph_implies = bool(morph_struct.strip())
+
+    return depth_implies or tbsa_implies or morph_implies
+
 # =============================
 # Readiness scoring (based ONLY on main checkboxes)
 # =============================
@@ -85,15 +105,15 @@ def scope_triage_v2(inputs: dict):
     inhalation = inputs.get("inhalation_risk_present") is True
 
     if mech and morph:
-        return "WITHIN_SCOPE", "Burn-consistent mechanism and morphology."
+        return "WITHIN SCOPE", "Burn-consistent mechanism and morphology."
     if chemical or electrical or inhalation:
-        return "WITHIN_SCOPE", "Special burn mechanism present."
+        return "WITHIN SCOPE", "Special burn mechanism present."
     if not mech or not morph:
-        return "OUTSIDE_SCOPE", "Mechanism or morphology not consistent with burn."
+        return "OUTSIDE OF SCOPE", "Mechanism or morphology not consistent with burn."
     return "UNCERTAIN", "Insufficient data to confirm burn scope."
 
 # =============================
-# Recommendation tier (based ONLY on checkboxes)
+# Recommendation tier (based ONLY on main checkboxes)
 # =============================
 def recommendation_tier_v2(inputs: dict, completeness: float, scope: str):
     high_risk = inputs.get("location_high_risk_checked") is True
@@ -103,13 +123,13 @@ def recommendation_tier_v2(inputs: dict, completeness: float, scope: str):
         or inputs.get("inhalation_risk_present") is True
     )
 
-    if scope == "OUTSIDE_SCOPE":
+    if scope == "OUTSIDE OF SCOPE":
         return "CONSIDER ALTERNATE SERVICE"
 
-    if scope == "WITHIN_SCOPE" and (special or high_risk):
+    if scope == "WITHIN SCOPE" and (special or high_risk):
         return "CONSULT NOW"
 
-    if scope == "WITHIN_SCOPE":
+    if scope == "WITHIN SCOPE":
         return "STRONGLY RECOMMEND BURN SURGERY CONSULT" if completeness >= 70 else "LOW RECOMMENDATION FOR BURN SURGERY CONSULT"
 
     return "CONSIDER ALTERNATE SERVICE"
@@ -117,7 +137,7 @@ def recommendation_tier_v2(inputs: dict, completeness: float, scope: str):
 # =============================
 # Message generator (human prose)
 # =============================
-def generate_message_v5(inputs, scope, tier, why, missing):
+def generate_message_v5(inputs, scope, why, missing):
     missing_short = "; ".join(missing[:4]) if missing else ""
     severe_skin = inputs.get("severe_skin_failure_flag") is True
 
@@ -152,7 +172,7 @@ def generate_message_v5(inputs, scope, tier, why, missing):
 # =============================
 st.set_page_config(page_title="Burn Consult Tool", layout="wide")
 st.title("Burn Consult Readiness Tool")
-st.caption("Decision support only. Adapt to local protocols.")
+st.caption("Decision support only. Adapt to local protocols. Do not enter PHI on hosted versions.")
 
 left, right = st.columns(2)
 
@@ -183,7 +203,7 @@ with left:
         mech_text = st.text_area(
             "Mechanism details (free text)",
             height=80,
-            placeholder="Example: hot water scald to R forearm while cooking; no chemical/electrical exposure; occurred at ~18:30.",
+            placeholder="Example: hot water scald to R forearm while cooking; no chemical/electrical exposure; occurred ~18:30.",
             key="mech_txt"
         )
         add_detail(details, "Mechanism (free text)", mech_text)
@@ -202,7 +222,7 @@ with left:
         toi_text = st.text_area(
             "Time of injury details (free text)",
             height=70,
-            placeholder="Include approximate time + whether delayed presentation + progression since injury.",
+            placeholder="Include approximate time + delayed presentation + progression since injury.",
             key="toi_txt"
         )
         add_detail(details, "Time of injury (free text)", toi_text)
@@ -217,7 +237,7 @@ with left:
         morph_text = st.text_area(
             "Morphology notes (free text)",
             height=70,
-            placeholder="Optional: appearance, distribution, photos obtained, alternative dx concerns.",
+            placeholder="Optional: distribution, photos, alternative diagnosis concerns.",
             key="morph_txt"
         )
         add_detail(details, "Morphology (free text)", morph_text)
@@ -240,7 +260,7 @@ with left:
         depth_text = st.text_area(
             "Depth rationale (free text)",
             height=70,
-            placeholder="Explain why you chose depth: sensation, blanching, cap refill, appearance.",
+            placeholder="Explain why: sensation, blanching, cap refill, appearance.",
             key="depth_txt"
         )
         add_detail(details, "Depth rationale (free text)", depth_text)
@@ -272,7 +292,7 @@ with left:
         loc_text = st.text_area(
             "High-risk location notes (free text)",
             height=60,
-            placeholder="Specify exact location(s), laterality, functional concerns (hand use, eye involvement, etc).",
+            placeholder="Specify exact location(s), laterality, functional concerns.",
             key="loc_txt"
         )
         add_detail(details, "High-risk location notes (free text)", loc_text)
@@ -290,7 +310,7 @@ with left:
         circ_text = st.text_area(
             "Circumferential/perfusion notes (free text)",
             height=70,
-            placeholder="Which limb/segment? pulses/cap refill/sensation? timing/trends? concern for escharotomy?",
+            placeholder="Which limb/segment? pulses/cap refill/sensation? concern for escharotomy?",
             key="circ_txt"
         )
         add_detail(details, "Circumferential/perfusion notes (free text)", circ_text)
@@ -309,7 +329,7 @@ with left:
         inh_text = st.text_area(
             "Inhalation assessment notes (free text)",
             height=70,
-            placeholder="Airway exam, O2 requirement, respiratory symptoms, any bronchoscopy/ABG/COHb if done.",
+            placeholder="Airway exam, O2 requirement, respiratory symptoms, any COHb/ABG/bronch if done.",
             key="inh_assessed_txt"
         )
         add_detail(details, "Inhalation assessment notes (free text)", inh_text)
@@ -342,7 +362,7 @@ with left:
         vitals_text = st.text_area(
             "Vitals/trends (free text)",
             height=70,
-            placeholder="Include BP/HR/RR/O2/temp + trend + interventions (fluids, oxygen, pressors).",
+            placeholder="BP/HR/RR/O2/temp + trend + interventions (fluids, oxygen, pressors).",
             key="vitals_txt"
         )
         add_detail(details, "Vitals/trends (free text)", vitals_text)
@@ -362,39 +382,31 @@ with left:
         add_detail(details, "Comorbidities/meds (free text)", pmh_text)
 
     # -------------------------
-# Consult question (PRIMARY objective)
-# -------------------------
-inputs["consult_question_defined"] = st.checkbox(
-    CHECKLIST["consult_question_defined"],
-    key="q_main"
-)
+    # Consult question (PRIMARY objective only)
+    # -------------------------
+    inputs["consult_question_defined"] = st.checkbox(CHECKLIST["consult_question_defined"], key="q_main")
+    if inputs["consult_question_defined"]:
+        primary_q = st.radio(
+            "Primary reason for Burn Surgery consult (choose ONE)",
+            [
+                "Confirm burn depth and TBSA",
+                "Determine need for burn-center transfer",
+                "Admission vs outpatient management guidance",
+                "Urgent operative / intervention concern (e.g., debridement, escharotomy)",
+                "Airway or inhalation injury guidance",
+                "Other (specify below)",
+            ],
+            key="q_primary"
+        )
+        add_detail(details, "Primary consult objective", primary_q)
 
-if inputs["consult_question_defined"]:
-    primary_q = st.radio(
-        "Primary reason for Burn Surgery consult (choose ONE)",
-        [
-            "Confirm burn depth and TBSA",
-            "Determine need for burn-center transfer",
-            "Admission vs outpatient management guidance",
-            "Urgent operative / intervention concern (e.g., debridement, escharotomy)",
-            "Airway or inhalation injury guidance",
-            "Other (specify below)",
-        ],
-        key="q_primary"
-    )
-    add_detail(details, "Primary consult objective", primary_q)
-
-    secondary_q = st.text_area(
-        "Additional concerns / secondary questions (optional)",
-        height=70,
-        placeholder=(
-            "Optional: secondary questions or nuance. "
-            "Example: concern for circumferential component, delayed presentation, "
-            "or alternative diagnosis."
-        ),
-        key="q_secondary"
-    )
-    add_detail(details, "Secondary consult considerations", secondary_q)
+        secondary_q = st.text_area(
+            "Additional concerns / secondary questions (optional)",
+            height=70,
+            placeholder="Optional nuance. Example: circumferential concern, delayed presentation, alternative diagnosis concerns.",
+            key="q_secondary"
+        )
+        add_detail(details, "Secondary consult considerations", secondary_q)
 
     # -------------------------
     # Special cases
@@ -410,7 +422,7 @@ if inputs["consult_question_defined"]:
         skin_text = st.text_area(
             "Severe skin failure notes (free text)",
             height=70,
-            placeholder="Why SJS/TEN concern? key distribution, mucosa, meds, timeline, vitals.",
+            placeholder="Why SJS/TEN concern? distribution, mucosa, meds, timeline, vitals.",
             key="skin_txt"
         )
         add_detail(details, "Severe skin failure notes (free text)", skin_text)
@@ -430,13 +442,10 @@ if inputs["consult_question_defined"]:
             chem_text = st.text_area(
                 "Chemical details (free text)",
                 height=70,
-                placeholder="Agent, duration of exposure, decon/irrigation details, symptoms, pH if used.",
+                placeholder="Agent, exposure duration, decon/irrigation details, symptoms, pH if used.",
                 key="chem_txt"
             )
             add_detail(details, "Chemical details (free text)", chem_text)
-        else:
-            # checkbox false means "not done yet" in readiness model
-            pass
     else:
         inputs["chemical_agent_known_if_chemical"] = None
 
@@ -454,28 +463,39 @@ if inputs["consult_question_defined"]:
                 key="elec_txt"
             )
             add_detail(details, "Electrical details (free text)", elec_text)
-        else:
-            pass
     else:
         inputs["electrical_voltage_known_if_electrical"] = None
 
 with right:
     st.subheader("Output")
 
+    # Readiness based on main checkboxes only
     r = burn_consult_readiness_v2(inputs)
-    scope, why = scope_triage_v2(inputs)
-    tier = recommendation_tier_v2(inputs, r["completeness_pct"], scope)
-    msg = generate_message_v5(inputs, scope, tier, why, r["missing_items"])
+
+    # Contradiction patch (logic copy only)
+    burn_evidence = inferred_burn_evidence(details)
+    inputs_for_logic = inputs.copy()
+    if burn_evidence and not inputs.get("morphology_burn_consistent", False):
+        inputs_for_logic["morphology_burn_consistent"] = True
+
+    scope, why = scope_triage_v2(inputs_for_logic)
+    tier = recommendation_tier_v2(inputs_for_logic, r["completeness_pct"], scope)
+    msg = generate_message_v5(inputs_for_logic, scope, why, r["missing_items"])
 
     st.metric("Scope", scope)
     st.metric("Recommendation", tier)
     st.metric("Readiness %", f"{r['completeness_pct']}%")
 
-    # Build paste-ready details block (structured + free text)
+    if burn_evidence and not inputs.get("morphology_burn_consistent", False):
+        st.warning(
+            "Possible inconsistency: you entered depth/TBSA/morphology features suggesting a burn, "
+            "but 'Morphology consistent with burn' is unchecked. "
+            "Either check it (if appropriate) or revise depth/TBSA to uncertain/0."
+        )
+
+    # Paste-ready details block (structured + free text)
     if details:
-        lines = []
-        for label, value in details.items():
-            lines.append(f"- {label}: {value}")
+        lines = [f"- {k}: {v}" for k, v in details.items()]
         details_block = "\n".join(lines)
         msg2 = msg + "\n\nKey details documented:\n" + details_block
     else:
