@@ -141,7 +141,7 @@ def generate_message_v5(inputs, scope, why, missing):
     missing_short = "; ".join(missing[:4]) if missing else ""
     severe_skin = inputs.get("severe_skin_failure_flag") is True
 
-    if scope == "OUTSIDE_SCOPE":
+    if scope == "OUTSIDE OF SCOPE":
         if severe_skin:
             msg = (
                 f"{why} The presentation suggests a severe non-burn skin process. "
