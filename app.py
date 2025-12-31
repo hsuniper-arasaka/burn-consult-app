@@ -14,7 +14,6 @@ CHECKLIST = {
     "chemical_agent_known_if_chemical": "If chemical: agent identified + decontamination documented",
     "electrical_voltage_known_if_electrical": "If electrical: voltage/LOC/ECG documented",
     "inhalation_risk_assessed": "Inhalation risk assessed",
-    "inhalation_risk_present": "Inhalation risk PRESENT",
     "vitals_reviewed": "Vitals reviewed / instability assessed",
     "comorbidities_reviewed": "Major comorbidities reviewed",
     "consult_question_defined": "Consult question defined (what do you want Burn to do?)",
