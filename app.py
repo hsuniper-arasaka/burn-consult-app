@@ -319,12 +319,17 @@ with left:
     # -------------------------
 # Inhalation (clean redesign)
 # -------------------------
+# -------------------------
+# Inhalation (clean redesign, unique keys)
+# -------------------------
 st.markdown("## Inhalation")
 
-inputs["inhalation_risk_assessed"] = st.checkbox(CHECKLIST["inhalation_risk_assessed"], key="inh_assessed_main")
+inputs["inhalation_risk_assessed"] = st.checkbox(
+    CHECKLIST["inhalation_risk_assessed"],
+    key="inh__assessed_main_v3"
+)
 
 if inputs["inhalation_risk_assessed"]:
-    # structured risk factors (optional but helpful)
     inh_risk_opts = [
         "Enclosed space exposure",
         "Smoke exposure",
@@ -334,14 +339,14 @@ if inputs["inhalation_risk_assessed"]:
         "Wheezing",
         "Stridor",
     ]
-    inh_risk = two_col_checkboxes(inh_risk_opts, "inh_risk")
+    inh_risk = two_col_checkboxes(inh_risk_opts, "inh__risk_v3")
     add_detail(details, "Inhalation risk factors (structured)", ", ".join(inh_risk))
 
     inh_text = st.text_area(
         "Inhalation assessment notes (free text)",
         height=70,
         placeholder="Airway exam, O2 requirement, respiratory symptoms, COHb/ABG if obtained.",
-        key="inh_assessed_txt"
+        key="inh__assessed_txt_v3"
     )
     add_detail(details, "Inhalation assessment notes (free text)", inh_text)
 
@@ -349,14 +354,12 @@ if inputs["inhalation_risk_assessed"]:
         "Inhalation injury result (choose ONE)",
         ["Not present", "Present", "Uncertain"],
         horizontal=True,
-        key="inh_result"
+        key="inh__result_v3"
     )
     add_detail(details, "Inhalation result (structured)", inh_result)
 
-    # convert radio → boolean for logic
     inputs["inhalation_risk_present"] = (inh_result == "Present")
 else:
-    # If not assessed, we treat as not present for logic (but readiness will flag assessed missing)
     inputs["inhalation_risk_present"] = False
 
     # -------------------------
