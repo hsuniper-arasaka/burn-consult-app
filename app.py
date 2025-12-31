@@ -317,35 +317,48 @@ with left:
     # -------------------------
     # Inhalation
     # -------------------------
-    st.markdown("## Inhalation")
+    # -------------------------
+# Inhalation (clean redesign)
+# -------------------------
+st.markdown("## Inhalation")
 
-    inputs["inhalation_risk_assessed"] = st.checkbox(CHECKLIST["inhalation_risk_assessed"], key="inh_assessed_main")
-    if inputs["inhalation_risk_assessed"]:
-        inh_risk_opts = ["Enclosed space exposure", "Smoke inhalation", "Soot in nares/oropharynx", "Singed nasal hairs", "Hoarseness/voice change", "Wheezing", "Stridor"]
-        inh_risk = two_col_checkboxes(inh_risk_opts, "inh_risk")
-        add_detail(details, "Inhalation risk factors (structured)", ", ".join(inh_risk))
+inputs["inhalation_risk_assessed"] = st.checkbox(CHECKLIST["inhalation_risk_assessed"], key="inh_assessed_main")
 
-        inh_text = st.text_area(
-            "Inhalation assessment notes (free text)",
-            height=70,
-            placeholder="Airway exam, O2 requirement, respiratory symptoms, any COHb/ABG/bronch if done.",
-            key="inh_assessed_txt"
-        )
-        add_detail(details, "Inhalation assessment notes (free text)", inh_text)
+if inputs["inhalation_risk_assessed"]:
+    # structured risk factors (optional but helpful)
+    inh_risk_opts = [
+        "Enclosed space exposure",
+        "Smoke exposure",
+        "Soot in nares/oropharynx",
+        "Singed nasal hairs",
+        "Hoarseness/voice change",
+        "Wheezing",
+        "Stridor",
+    ]
+    inh_risk = two_col_checkboxes(inh_risk_opts, "inh_risk")
+    add_detail(details, "Inhalation risk factors (structured)", ", ".join(inh_risk))
 
-    inputs["inhalation_risk_present"] = st.checkbox(CHECKLIST["inhalation_risk_present"], key="inh_present_main")
-    if inputs["inhalation_risk_present"]:
-        inh_present_opts = ["Respiratory distress", "Hypoxia", "Carbonaceous sputum", "Intubated", "Progressive airway edema concern"]
-        inh_present = two_col_checkboxes(inh_present_opts, "inh_present")
-        add_detail(details, "Inhalation present indicators (structured)", ", ".join(inh_present))
+    inh_text = st.text_area(
+        "Inhalation assessment notes (free text)",
+        height=70,
+        placeholder="Airway exam, O2 requirement, respiratory symptoms, COHb/ABG if obtained.",
+        key="inh_assessed_txt"
+    )
+    add_detail(details, "Inhalation assessment notes (free text)", inh_text)
 
-        inh_present_text = st.text_area(
-            "Inhalation present rationale (free text)",
-            height=70,
-            placeholder="What makes you confident inhalation injury is present?",
-            key="inh_present_txt"
-        )
-        add_detail(details, "Inhalation present rationale (free text)", inh_present_text)
+    inh_result = st.radio(
+        "Inhalation injury result (choose ONE)",
+        ["Not present", "Present", "Uncertain"],
+        horizontal=True,
+        key="inh_result"
+    )
+    add_detail(details, "Inhalation result (structured)", inh_result)
+
+    # convert radio → boolean for logic
+    inputs["inhalation_risk_present"] = (inh_result == "Present")
+else:
+    # If not assessed, we treat as not present for logic (but readiness will flag assessed missing)
+    inputs["inhalation_risk_present"] = False
 
     # -------------------------
     # Vitals / context
