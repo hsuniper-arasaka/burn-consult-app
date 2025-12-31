@@ -324,43 +324,32 @@ with left:
 # -------------------------
 st.markdown("## Inhalation")
 
+# keep the checkbox OUTSIDE the conditional container
 inputs["inhalation_risk_assessed"] = st.checkbox(
-    CHECKLIST["inhalation_risk_assessed"],
-    key="inh__assessed_main_v3"
+    "Inhalation risk assessed",
+    key="inh__assessed_main_v4"
 )
 
-if inputs["inhalation_risk_assessed"]:
-    inh_risk_opts = [
-        "Enclosed space exposure",
-        "Smoke exposure",
-        "Soot in nares/oropharynx",
-        "Singed nasal hairs",
-        "Hoarseness/voice change",
-        "Wheezing",
-        "Stridor",
-    ]
-    inh_risk = two_col_checkboxes(inh_risk_opts, "inh__risk_v3")
-    add_detail(details, "Inhalation risk factors (structured)", ", ".join(inh_risk))
+# put the expanding stuff inside its own container
+with st.container():
+    if inputs["inhalation_risk_assessed"]:
+        inh_result = st.radio(
+            "Inhalation injury result (choose ONE)",
+            ["Not present", "Present", "Uncertain"],
+            horizontal=True,
+            key="inh__result_v4"
+        )
 
-    inh_text = st.text_area(
-        "Inhalation assessment notes (free text)",
-        height=70,
-        placeholder="Airway exam, O2 requirement, respiratory symptoms, COHb/ABG if obtained.",
-        key="inh__assessed_txt_v3"
-    )
-    add_detail(details, "Inhalation assessment notes (free text)", inh_text)
+        inputs["inhalation_risk_present"] = (inh_result == "Present")
 
-    inh_result = st.radio(
-        "Inhalation injury result (choose ONE)",
-        ["Not present", "Present", "Uncertain"],
-        horizontal=True,
-        key="inh__result_v3"
-    )
-    add_detail(details, "Inhalation result (structured)", inh_result)
-
-    inputs["inhalation_risk_present"] = (inh_result == "Present")
-else:
-    inputs["inhalation_risk_present"] = False
+        inh_text = st.text_area(
+            "Inhalation assessment notes (free text)",
+            height=70,
+            placeholder="Airway exam, O2 requirement, soot/voice change, COHb/ABG if obtained.",
+            key="inh__assessed_txt_v4"
+        )
+    else:
+        inputs["inhalation_risk_present"] = False
 
     # -------------------------
     # Vitals / context
