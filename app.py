@@ -77,7 +77,6 @@ def burn_consult_readiness_v2(inputs: dict):
         "comorbidities_reviewed",
         "consult_question_defined",
         "inhalation_risk_assessed",
-        "inhalation_risk_present",
     ]
 
     if mech_type == "chemical":
