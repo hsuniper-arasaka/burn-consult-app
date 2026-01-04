@@ -4,35 +4,12 @@ import streamlit as st
 # Page config
 # =============================
 st.set_page_config(page_title="Burn Consult Readiness Tool", layout="wide")
+
 st.title("Burn Consult Readiness Tool")
 st.caption("Decision support only. Adapt to local protocols. Do not enter PHI on hosted versions.")
 
 # =============================
-# Helpers
-# =============================
-def add_detail(details: dict, label: str, value: str):
-    value = (value or "").strip()
-    if value:
-        details[label] = value
-
-def sidebar_two_col_checkboxes(options, key_prefix: str):
-    """Two-column checkboxes inside sidebar. Returns list of selected options."""
-    col1, col2 = st.sidebar.columns(2)
-    selected = []
-    half = (len(options) + 1) // 2
-    left = options[:half]
-    right = options[half:]
-
-    for i, opt in enumerate(left):
-        if col1.checkbox(opt, key=f"{key_prefix}__L__{i}__{opt}"):
-            selected.append(opt)
-    for i, opt in enumerate(right):
-        if col2.checkbox(opt, key=f"{key_prefix}__R__{i}__{opt}"):
-            selected.append(opt)
-    return selected
-
-# =============================
-# Logic
+# Labels (for missing-items list)
 # =============================
 LABELS = {
     "mechanism_documented": "Mechanism documented",
@@ -42,18 +19,34 @@ LABELS = {
     "tbsa_estimated": "TBSA estimated",
     "location_high_risk_checked": "High-risk areas assessed",
     "circumferential_checked": "Circumferential involvement assessed",
-    "chemical_agent_known_if_chemical": "If chemical: agent identified + decontamination documented",
-    "electrical_voltage_known_if_electrical": "If electrical: voltage/LOC/ECG documented",
     "inhalation_risk_assessed": "Inhalation risk assessed",
     "vitals_reviewed": "Vitals reviewed / instability assessed",
     "comorbidities_reviewed": "Major comorbidities reviewed",
     "consult_question_defined": "Consult question defined",
+    "chemical_agent_known_if_chemical": "If chemical: agent identified + decontamination documented",
+    "electrical_voltage_known_if_electrical": "If electrical: voltage/LOC/ECG documented",
 }
 
+# =============================
+# Helper functions
+# =============================
+def add_detail(details: dict, label: str, value):
+    """Add non-empty values into a dict for message output."""
+    if value is None:
+        return
+    if isinstance(value, (list, tuple)):
+        value = ", ".join([v for v in value if str(v).strip()])
+    value = str(value).strip()
+    if value:
+        details[label] = value
+
 def compute_readiness(inputs: dict):
+    """
+    Readiness = completeness of basic consult-relevant documentation.
+    NOTE: inhalation PRESENT is NOT required; only "assessed" is.
+    """
     mech_type = inputs.get("mechanism_type", "unknown")
 
-    # IMPORTANT: "Inhalation risk PRESENT" is NOT required for readiness.
     required = [
         "mechanism_documented",
         "time_of_injury",
@@ -77,9 +70,16 @@ def compute_readiness(inputs: dict):
     missing = [k for k in required if inputs.get(k) is not True]
 
     pct = round((len(done) / len(required)) * 100, 1) if required else 0.0
-    return pct, missing
+    missing_labels = [LABELS.get(k, k) for k in missing]
+    return pct, missing_labels
 
 def scope_triage(inputs: dict):
+    """
+    Scope: WITHIN SCOPE if either:
+      - mechanism + morphology are burn-consistent, OR
+      - special mechanism is PRESENT (chemical/electrical/inhalation)
+    Otherwise OUTSIDE OF SCOPE.
+    """
     mech_doc = inputs.get("mechanism_documented") is True
     morph = inputs.get("morphology_burn_consistent") is True
 
@@ -97,7 +97,13 @@ def scope_triage(inputs: dict):
 
     return "OUTSIDE OF SCOPE", "Mechanism and/or morphology not consistent with burn."
 
-def recommendation(inputs: dict, readiness_pct: float, scope: str):
+def recommend_tier(inputs: dict, readiness_pct: float, scope: str):
+    """
+    Tier:
+      - OUTSIDE => Consider alternate service
+      - WITHIN + special/high-risk => Consult now
+      - WITHIN + otherwise => Strongly recommend if readiness >=70 else Low recommendation
+    """
     high_risk = inputs.get("location_high_risk_checked") is True
     special_present = (
         inputs.get("chemical_agent_known_if_chemical") is True
@@ -108,17 +114,20 @@ def recommendation(inputs: dict, readiness_pct: float, scope: str):
     if scope == "OUTSIDE OF SCOPE":
         return "CONSIDER ALTERNATE SERVICE"
 
-    if special_present or high_risk:
+    if high_risk or special_present:
         return "CONSULT NOW"
 
     if readiness_pct >= 70:
         return "STRONGLY RECOMMEND BURN SURGERY CONSULT"
+
     return "LOW RECOMMENDATION FOR BURN SURGERY CONSULT"
 
 def build_message(inputs: dict, details: dict, scope: str, tier: str, why: str, missing_labels: list[str]):
-    missing_short = "; ".join(missing_labels[:5]) if missing_labels else ""
-    key_lines = [f"- {k}: {v}" for k, v in details.items() if (v or "").strip()]
+    """Generate paste-ready message. Details are appended if present."""
+    key_lines = [f"- {k}: {v}" for k, v in details.items() if str(v).strip()]
     key_block = "\n".join(key_lines).strip()
+
+    missing_short = "; ".join(missing_labels[:6]) if missing_labels else ""
 
     severe_skin = inputs.get("severe_skin_failure_flag") is True
 
@@ -142,6 +151,7 @@ def build_message(inputs: dict, details: dict, scope: str, tier: str, why: str, 
             msg += f"\n\nMissing elements: {missing_short}."
         return msg
 
+    # WITHIN SCOPE
     msg = f"Recommend Burn Surgery consultation. Tier: {tier}. Rationale: {why}"
     if key_block:
         msg += f"\n\nKey details documented:\n{key_block}"
@@ -149,10 +159,11 @@ def build_message(inputs: dict, details: dict, scope: str, tier: str, why: str, 
         msg += f"\n\nMissing elements being obtained in parallel: {missing_short}."
     return msg
 
+
 # =============================
-# SIDEBAR: Inputs
+# Sidebar: Inputs (NO columns)
 # =============================
-st.sidebar.header("Inputs (Sidebar)")
+st.sidebar.header("Inputs")
 
 if "submitted_once" not in st.session_state:
     st.session_state.submitted_once = False
@@ -163,152 +174,157 @@ with st.sidebar.form("burn_form", clear_on_submit=False):
     inputs = {}
     details = {}
 
+    # Mechanism type (overall)
     inputs["mechanism_type"] = st.selectbox(
         "Mechanism type (overall)",
         ["thermal", "scald", "chemical", "electrical", "inhalation", "friction", "unknown"],
-        key="mech_type__sb_v1"
+        key="mech_type_sb",
     )
 
     st.subheader("Core burn assessment")
 
-    inputs["mechanism_documented"] = st.checkbox("Mechanism documented", key="mech_doc__sb_v1")
+    # Mechanism documented
+    inputs["mechanism_documented"] = st.checkbox("Mechanism documented", key="mech_doc_sb")
     if inputs["mechanism_documented"]:
         mech_opts = ["Scald", "Flame", "Contact", "Flash", "Steam", "Friction", "Hot oil/grease", "Unknown/unclear"]
-        sel = sidebar_two_col_checkboxes(mech_opts, "mech_opts__sb_v1")
-        add_detail(details, "Mechanism (structured)", ", ".join(sel))
-        txt = st.text_area(
+        mech_sel = st.multiselect("Mechanism (structured)", mech_opts, key="mech_struct_sb")
+        add_detail(details, "Mechanism (structured)", mech_sel)
+        mech_txt = st.text_area(
             "Mechanism details (free text)",
             height=70,
             placeholder="Example: hot water scald to R forearm; no chemical/electrical exposure; occurred ~18:30.",
-            key="mech_txt__sb_v1"
+            key="mech_txt_sb",
         )
-        add_detail(details, "Mechanism details", txt)
+        add_detail(details, "Mechanism details", mech_txt)
 
-    inputs["time_of_injury"] = st.checkbox("Time of injury documented", key="toi__sb_v1")
+    # Time of injury
+    inputs["time_of_injury"] = st.checkbox("Time of injury documented", key="toi_sb")
     if inputs["time_of_injury"]:
         tf = st.radio(
             "Timeframe (structured)",
             ["< 1 hour", "1–6 hours", "6–24 hours", "24–72 hours", "> 72 hours", "Unknown"],
-            horizontal=True,
-            key="timeframe__sb_v1",
+            horizontal=False,
+            key="timeframe_sb",
         )
         add_detail(details, "Timeframe (structured)", tf)
         toi_txt = st.text_area(
             "Time of injury details (free text)",
             height=60,
             placeholder="Approx time, delayed presentation, progression since injury.",
-            key="toi_txt__sb_v1",
+            key="toi_txt_sb",
         )
         add_detail(details, "Time of injury details", toi_txt)
 
-    inputs["morphology_burn_consistent"] = st.checkbox("Morphology consistent with burn", key="morph__sb_v1")
+    # Morphology
+    inputs["morphology_burn_consistent"] = st.checkbox("Morphology consistent with burn", key="morph_sb")
     if inputs["morphology_burn_consistent"]:
-        morph_sel = sidebar_two_col_checkboxes(
-            ["Blistering", "Eschar", "Tissue loss", "Charred/white/leathery", "Weeping/moist", "Dry/waxy"],
-            "morph_opts__sb_v1"
-        )
-        add_detail(details, "Morphology (structured)", ", ".join(morph_sel))
+        morph_opts = ["Blistering", "Eschar", "Tissue loss", "Charred/white/leathery", "Weeping/moist", "Dry/waxy"]
+        morph_sel = st.multiselect("Morphology (structured)", morph_opts, key="morph_struct_sb")
+        add_detail(details, "Morphology (structured)", morph_sel)
         morph_txt = st.text_area(
             "Morphology details (free text)",
             height=60,
             placeholder="Describe appearance, borders, tenderness, cap refill, progression.",
-            key="morph_txt__sb_v1",
+            key="morph_txt_sb",
         )
         add_detail(details, "Morphology details", morph_txt)
 
-    inputs["depth_estimated"] = st.checkbox("Depth estimated", key="depth__sb_v1")
+    # Depth
+    inputs["depth_estimated"] = st.checkbox("Depth estimated", key="depth_sb")
     if inputs["depth_estimated"]:
         depth = st.radio(
             "Depth estimate (structured)",
             ["Superficial", "Superficial partial", "Deep partial", "Full thickness", "Uncertain"],
-            horizontal=True,
-            key="depth_radio__sb_v1",
+            horizontal=False,
+            key="depth_radio_sb",
         )
         add_detail(details, "Depth (structured)", depth)
 
-    inputs["tbsa_estimated"] = st.checkbox("TBSA estimated", key="tbsa__sb_v1")
+    # TBSA
+    inputs["tbsa_estimated"] = st.checkbox("TBSA estimated", key="tbsa_sb")
     if inputs["tbsa_estimated"]:
-        tbsa_val = st.number_input("TBSA %", 0.0, 100.0, 0.0, 0.5, key="tbsa_val__sb_v1")
-        tbsa_method = st.selectbox("TBSA method", ["Rule of 9s", "Palmar method", "Lund-Browder", "Other/uncertain"], key="tbsa_method__sb_v1")
+        tbsa_val = st.number_input("TBSA %", 0.0, 100.0, 0.0, 0.5, key="tbsa_val_sb")
+        tbsa_method = st.selectbox("TBSA method", ["Rule of 9s", "Palmar method", "Lund-Browder", "Other/uncertain"], key="tbsa_method_sb")
         add_detail(details, "TBSA % (structured)", f"{tbsa_val:.1f}%")
         add_detail(details, "TBSA method (structured)", tbsa_method)
 
-    inputs["location_high_risk_checked"] = st.checkbox("High-risk areas assessed", key="hi_risk__sb_v1")
+    # High-risk areas
+    inputs["location_high_risk_checked"] = st.checkbox("High-risk areas assessed", key="hi_risk_sb")
     if inputs["location_high_risk_checked"]:
-        hi_sel = sidebar_two_col_checkboxes(["Face", "Hands", "Feet", "Genitals", "Perineum", "Major joints"], "hi_risk_opts__sb_v1")
-        add_detail(details, "High-risk areas (structured)", ", ".join(hi_sel))
+        hi_opts = ["Face", "Hands", "Feet", "Genitals", "Perineum", "Major joints"]
+        hi_sel = st.multiselect("High-risk areas (structured)", hi_opts, key="hi_struct_sb")
+        add_detail(details, "High-risk areas (structured)", hi_sel)
 
-    inputs["circumferential_checked"] = st.checkbox("Circumferential involvement assessed", key="circ__sb_v1")
+    # Circumferential
+    inputs["circumferential_checked"] = st.checkbox("Circumferential involvement assessed", key="circ_sb")
     if inputs["circumferential_checked"]:
-        circ = st.radio("Circumferential involvement", ["No", "Yes", "Uncertain"], horizontal=True, key="circ_radio__sb_v1")
+        circ = st.radio("Circumferential involvement", ["No", "Yes", "Uncertain"], horizontal=False, key="circ_radio_sb")
         add_detail(details, "Circumferential involvement (structured)", circ)
 
     st.subheader("Inhalation")
-    inputs["inhalation_risk_assessed"] = st.checkbox("Inhalation risk assessed", key="inh_assessed__sb_v1")
-    inputs["inhalation_risk_present"] = False
 
+    inputs["inhalation_risk_assessed"] = st.checkbox("Inhalation risk assessed", key="inh_assessed_sb")
+    inputs["inhalation_risk_present"] = False  # default
     if inputs["inhalation_risk_assessed"]:
         inh_findings = ["Enclosed space exposure", "Smoke exposure", "Soot in nares/oropharynx", "Singed nasal hairs", "Hoarseness/voice change", "Wheezing", "Stridor"]
-        inh_sel = sidebar_two_col_checkboxes(inh_findings, "inh_findings__sb_v1")
-        add_detail(details, "Inhalation findings (structured)", ", ".join(inh_sel))
+        inh_sel = st.multiselect("Inhalation findings (structured)", inh_findings, key="inh_find_struct_sb")
+        add_detail(details, "Inhalation findings (structured)", inh_sel)
 
         inh_txt = st.text_area(
-            "Inhalation assessment notes",
+            "Inhalation assessment notes (free text)",
             height=60,
             placeholder="Airway exam, O2 requirement, COHb/ABG if obtained.",
-            key="inh_txt__sb_v1",
+            key="inh_txt_sb",
         )
         add_detail(details, "Inhalation notes", inh_txt)
 
         inh_result = st.radio(
             "Inhalation injury result (choose ONE)",
             ["Not present", "Present", "Uncertain"],
-            horizontal=True,
-            key="inh_result__sb_v1",
+            horizontal=False,
+            key="inh_result_sb",
         )
         add_detail(details, "Inhalation result (structured)", inh_result)
         inputs["inhalation_risk_present"] = (inh_result == "Present")
 
     st.subheader("Vitals / context")
-    inputs["vitals_reviewed"] = st.checkbox("Vitals reviewed / instability assessed", key="vitals__sb_v1")
-    inputs["comorbidities_reviewed"] = st.checkbox("Major comorbidities reviewed", key="comorb__sb_v1")
+    inputs["vitals_reviewed"] = st.checkbox("Vitals reviewed / instability assessed", key="vitals_sb")
+    inputs["comorbidities_reviewed"] = st.checkbox("Major comorbidities reviewed", key="comorb_sb")
 
     st.subheader("Consult question")
     cq = st.selectbox(
         "What do you want Burn to do? (choose ONE)",
         ["Depth/TBSA confirmation", "Debridement/wound care plan", "Transfer/burn center eval", "Airway/inhalation concern", "Other"],
-        key="cq_select__sb_v1"
+        key="cq_struct_sb"
     )
-    inputs["consult_question_defined"] = True
+    inputs["consult_question_defined"] = True  # forced true because you must choose one
     add_detail(details, "Consult question (structured)", cq)
-    cq_txt = st.text_area("Additional consult details", height=70, key="cq_txt__sb_v1")
+    cq_txt = st.text_area("Additional consult details (free text)", height=70, key="cq_txt_sb")
     add_detail(details, "Consult question notes", cq_txt)
 
     st.subheader("Special cases")
-    inputs["severe_skin_failure_flag"] = st.checkbox("Severe skin failure suspected (e.g., SJS/TEN pattern)", key="sjs__sb_v1")
+    inputs["severe_skin_failure_flag"] = st.checkbox("Severe skin failure suspected (e.g., SJS/TEN pattern)", key="sjs_sb")
 
     st.subheader("Mechanism-specific fields")
     mech_type = inputs["mechanism_type"]
 
-    chem_disabled = (mech_type != "chemical")
-    inputs["chemical_agent_known_if_chemical"] = st.checkbox(
-        "If chemical: agent identified + decontamination documented",
-        disabled=chem_disabled,
-        key="chem__sb_v1",
-    )
-    if not chem_disabled and inputs["chemical_agent_known_if_chemical"]:
-        chem_txt = st.text_area("Chemical details", height=60, key="chem_txt__sb_v1")
-        add_detail(details, "Chemical details", chem_txt)
+    # Chemical
+    if mech_type == "chemical":
+        inputs["chemical_agent_known_if_chemical"] = st.checkbox("If chemical: agent identified + decontamination documented", key="chem_sb")
+        if inputs["chemical_agent_known_if_chemical"]:
+            chem_txt = st.text_area("Chemical details (free text)", height=60, key="chem_txt_sb")
+            add_detail(details, "Chemical details", chem_txt)
+    else:
+        inputs["chemical_agent_known_if_chemical"] = False
 
-    elec_disabled = (mech_type != "electrical")
-    inputs["electrical_voltage_known_if_electrical"] = st.checkbox(
-        "If electrical: voltage/LOC/ECG documented",
-        disabled=elec_disabled,
-        key="elec__sb_v1",
-    )
-    if not elec_disabled and inputs["electrical_voltage_known_if_electrical"]:
-        elec_txt = st.text_area("Electrical details", height=60, key="elec_txt__sb_v1")
-        add_detail(details, "Electrical details", elec_txt)
+    # Electrical
+    if mech_type == "electrical":
+        inputs["electrical_voltage_known_if_electrical"] = st.checkbox("If electrical: voltage/LOC/ECG documented", key="elec_sb")
+        if inputs["electrical_voltage_known_if_electrical"]:
+            elec_txt = st.text_area("Electrical details (free text)", height=60, key="elec_txt_sb")
+            add_detail(details, "Electrical details", elec_txt)
+    else:
+        inputs["electrical_voltage_known_if_electrical"] = False
 
     submitted = st.form_submit_button("Update Output")
 
@@ -317,8 +333,9 @@ with st.sidebar.form("burn_form", clear_on_submit=False):
         st.session_state.latest_inputs = inputs
         st.session_state.latest_details = details
 
+
 # =============================
-# MAIN: Output
+# Main page: Output
 # =============================
 st.header("Output")
 
@@ -328,17 +345,17 @@ else:
     use_inputs = st.session_state.latest_inputs
     use_details = st.session_state.latest_details
 
-    readiness_pct, missing_keys = compute_readiness(use_inputs)
+    readiness_pct, missing_labels = compute_readiness(use_inputs)
     scope, why = scope_triage(use_inputs)
-    tier = recommendation(use_inputs, readiness_pct, scope)
+    tier = recommend_tier(use_inputs, readiness_pct, scope)
 
-    missing_labels = [LABELS.get(k, k) for k in missing_keys]
     msg = build_message(use_inputs, use_details, scope, tier, why, missing_labels)
 
-    c1, c2, c3 = st.columns(3)
-    c1.metric("Scope", scope)
-    c2.metric("Recommendation", tier)
-    c3.metric("Readiness %", f"{readiness_pct}%")
+    # Metrics without columns (to avoid layout issues)
+    st.subheader("Summary")
+    st.write(f"**Scope:** {scope}")
+    st.write(f"**Recommendation:** {tier}")
+    st.write(f"**Readiness %:** {readiness_pct}%")
 
     st.markdown("### Paste-ready message")
     st.code(msg)
