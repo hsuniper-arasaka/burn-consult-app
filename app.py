@@ -234,80 +234,54 @@ with st.sidebar.form("burn_form", clear_on_submit=False):
         circ = st.radio("Circumferential involvement", ["No", "Yes", "Uncertain"], key="circ_radio_sb")
         add_detail(details, "Circumferential involvement (structured)", circ)
 
-    # ===== Inhalation (STABLE: always render, disable until assessed) =====
+        # ===== Inhalation (STABLE, NO GAP) =====
     st.subheader("Inhalation")
 
-    inputs["inhalation_risk_assessed"] = st.checkbox("Inhalation risk assessed")
-
-inh_findings = st.multiselect(
-    "Inhalation findings",
-    [...],
-    disabled=not inputs["inhalation_risk_assessed"]
-)
-
-inh_notes = st.text_area(
-    "Inhalation notes",
-    disabled=not inputs["inhalation_risk_assessed"]
-)
-
-inh_result = st.radio(
-    "Inhalation injury result",
-    ["Not present", "Present", "Uncertain"],
-    disabled=not inputs["inhalation_risk_assessed"]
-)
-
-    # set present flag ONLY if assessed AND marked present
-    inputs["inhalation_risk_present"] = bool(assessed and (inh_result == "Present"))
-
-    # only add inhalation details to message if assessed
-    if assessed:
-        add_detail(details, "Inhalation findings (structured)", inh_sel)
-        add_detail(details, "Inhalation notes", inh_txt)
-        add_detail(details, "Inhalation result (structured)", inh_result)
-
-    st.subheader("Vitals / context")
-    inputs["vitals_reviewed"] = st.checkbox("Vitals reviewed / instability assessed", key="vitals_sb")
-    inputs["comorbidities_reviewed"] = st.checkbox("Major comorbidities reviewed", key="comorb_sb")
-
-    st.subheader("Consult question")
-    cq = st.selectbox(
-        "What do you want Burn to do? (choose ONE)",
-        ["Depth/TBSA confirmation", "Debridement/wound care plan", "Transfer/burn center eval", "Airway/inhalation concern", "Other"],
-        key="cq_struct_sb"
+    inputs["inhalation_risk_assessed"] = st.checkbox(
+        "Inhalation risk assessed",
+        key="inh_assessed"
     )
-    inputs["consult_question_defined"] = True
-    add_detail(details, "Consult question (structured)", cq)
-    cq_txt = st.text_area("Additional consult details (free text)", height=70, key="cq_txt_sb")
-    add_detail(details, "Consult question notes", cq_txt)
 
-    st.subheader("Special cases")
-    inputs["severe_skin_failure_flag"] = st.checkbox("Severe skin failure suspected (e.g., SJS/TEN pattern)", key="sjs_sb")
+    inh_findings = st.multiselect(
+        "Inhalation findings (structured)",
+        [
+            "Enclosed space exposure",
+            "Smoke exposure",
+            "Soot in nares/oropharynx",
+            "Singed nasal hairs",
+            "Hoarseness/voice change",
+            "Wheezing",
+            "Stridor",
+        ],
+        disabled=not inputs["inhalation_risk_assessed"],
+        key="inh_findings",
+    )
 
-    st.subheader("Mechanism-specific fields")
-    mech_type = inputs["mechanism_type"]
+    inh_notes = st.text_area(
+        "Inhalation assessment notes (free text)",
+        placeholder="Airway exam, O2 requirement, COHb/ABG if obtained.",
+        height=60,
+        disabled=not inputs["inhalation_risk_assessed"],
+        key="inh_notes",
+    )
 
-    if mech_type == "chemical":
-        inputs["chemical_agent_known_if_chemical"] = st.checkbox("If chemical: agent identified + decontamination documented", key="chem_sb")
-        if inputs["chemical_agent_known_if_chemical"]:
-            chem_txt = st.text_area("Chemical details (free text)", height=60, key="chem_txt_sb")
-            add_detail(details, "Chemical details", chem_txt)
-    else:
-        inputs["chemical_agent_known_if_chemical"] = False
+    inh_result = st.radio(
+        "Inhalation injury result (choose ONE)",
+        ["Not present", "Present", "Uncertain"],
+        disabled=not inputs["inhalation_risk_assessed"],
+        key="inh_result",
+    )
 
-    if mech_type == "electrical":
-        inputs["electrical_voltage_known_if_electrical"] = st.checkbox("If electrical: voltage/LOC/ECG documented", key="elec_sb")
-        if inputs["electrical_voltage_known_if_electrical"]:
-            elec_txt = st.text_area("Electrical details (free text)", height=60, key="elec_txt_sb")
-            add_detail(details, "Electrical details", elec_txt)
-    else:
-        inputs["electrical_voltage_known_if_electrical"] = False
+    # logic flags
+    inputs["inhalation_risk_present"] = (
+        inputs["inhalation_risk_assessed"] and inh_result == "Present"
+    )
 
-    submitted = st.form_submit_button("Update Output")
-
-    if submitted:
-        st.session_state.submitted_once = True
-        st.session_state.latest_inputs = inputs
-        st.session_state.latest_details = details
+    # add to consult message ONLY if assessed
+    if inputs["inhalation_risk_assessed"]:
+        add_detail(details, "Inhalation findings (structured)", inh_findings)
+        add_detail(details, "Inhalation notes", inh_notes)
+        add_detail(details, "Inhalation result (structured)", inh_result)
 
 
 # =============================
