@@ -237,32 +237,24 @@ with st.sidebar.form("burn_form", clear_on_submit=False):
     # ===== Inhalation (STABLE: always render, disable until assessed) =====
     st.subheader("Inhalation")
 
-    inputs["inhalation_risk_assessed"] = st.checkbox("Inhalation risk assessed", key="inh_assessed_sb")
-    assessed = inputs["inhalation_risk_assessed"]
+    inputs["inhalation_risk_assessed"] = st.checkbox("Inhalation risk assessed")
 
-    inh_findings = [
-        "Enclosed space exposure", "Smoke exposure", "Soot in nares/oropharynx", "Singed nasal hairs",
-        "Hoarseness/voice change", "Wheezing", "Stridor"
-    ]
-    inh_sel = st.multiselect(
-        "Inhalation findings (structured)",
-        inh_findings,
-        key="inh_find_struct_sb",
-        disabled=not assessed
-    )
-    inh_txt = st.text_area(
-        "Inhalation assessment notes (free text)",
-        height=60,
-        placeholder="Airway exam, O2 requirement, COHb/ABG if obtained.",
-        key="inh_txt_sb",
-        disabled=not assessed
-    )
-    inh_result = st.radio(
-        "Inhalation injury result (choose ONE)",
-        ["Not present", "Present", "Uncertain"],
-        key="inh_result_sb",
-        disabled=not assessed
-    )
+inh_findings = st.multiselect(
+    "Inhalation findings",
+    [...],
+    disabled=not inputs["inhalation_risk_assessed"]
+)
+
+inh_notes = st.text_area(
+    "Inhalation notes",
+    disabled=not inputs["inhalation_risk_assessed"]
+)
+
+inh_result = st.radio(
+    "Inhalation injury result",
+    ["Not present", "Present", "Uncertain"],
+    disabled=not inputs["inhalation_risk_assessed"]
+)
 
     # set present flag ONLY if assessed AND marked present
     inputs["inhalation_risk_present"] = bool(assessed and (inh_result == "Present"))
