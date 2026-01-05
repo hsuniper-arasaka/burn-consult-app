@@ -5,6 +5,20 @@ import streamlit as st
 # =============================
 st.set_page_config(page_title="Burn Consult Readiness Tool", layout="wide")
 
+st.markdown(
+    """
+    <style>
+        section[data-testid="stSidebar"] {
+            width: 420px !important;
+        }
+        section[data-testid="stSidebar"] > div {
+            width: 420px !important;
+        }
+    </style>
+    """,
+    unsafe_allow_html=True,
+)
+
 st.title("Burn Consult Readiness Tool")
 st.caption("Decision support only. Adapt to local protocols. Do not enter PHI on hosted versions.")
 
