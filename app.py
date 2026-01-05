@@ -16,6 +16,20 @@ st.markdown(
         }
     </style>
     """,
+    unsafe_allow_html=True
+)
+
+st.markdown(
+    """
+    <style>
+        section[data-testid="stSidebar"] {
+            width: 420px !important;
+        }
+        section[data-testid="stSidebar"] > div {
+            width: 420px !important;
+        }
+    </style>
+    """,
     unsafe_allow_html=True,
 )
 
