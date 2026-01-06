@@ -401,7 +401,11 @@ st.write(f"**Recommendation:** {tier}")
 st.write(f"**Readiness %:** {readiness_pct}%")
 
 st.markdown("### Paste-ready message")
-st.code(msg)
+st.text_area(
+    "Paste-ready message",
+    value=msg,
+    height=260,
+)
 
 st.markdown("### Top missing items")
 if missing_labels:
