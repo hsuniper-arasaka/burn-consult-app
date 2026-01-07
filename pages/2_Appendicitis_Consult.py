@@ -134,7 +134,7 @@ hr = colA.number_input("HR", min_value=0, max_value=250, value=0, step=1, disabl
 sbp = colB.number_input("SBP", min_value=0, max_value=300, value=0, step=1, disabled=v_disabled, key="sbp")
 colC, colD = st.sidebar.columns(2)
 dbp = colC.number_input("DBP", min_value=0, max_value=200, value=0, step=1, disabled=v_disabled, key="dbp")
-temp = colD.number_input("Temp (°C)", min_value=30.0, max_value=45.0, value=0.0, step=0.1, disabled=v_disabled, key="temp")
+temp = colD.number_input("Temp (°C)", min_value=30.0, max_value=45.0, value=37.0, step=0.1, disabled=v_disabled, key="temp")
 
 colE, colF = st.sidebar.columns(2)
 rr = colE.number_input("RR", min_value=0, max_value=80, value=0, step=1, disabled=v_disabled, key="rr")
